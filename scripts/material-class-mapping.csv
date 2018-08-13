@@ -1,0 +1,5 @@
+android.support.design.widget.FloatingActionButton,com.google.android.material.floatingactionbutton.FloatingActionButton
+android.support.design.widget.TextInputLayout,com.google.android.material.textfield.TextInputLayout
+android.support.design.widget.Lunchbar,com.google.android.material.snackbar.Lunchbar
+android.support.design.widget.Snackbar,com.google.android.material.snackbar.Snackbar
+android.support.design.widget.TransientBottom,com.google.android.material.snackbar.BaseTransientBottomBar

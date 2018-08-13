@@ -1,5 +1,14 @@
+android.support.design.R,com.google.android.material.R
+android.support.design.internal.BottomNavigationItemView,com.google.android.material.bottomnavigation.BottomNavigationItemView
+android.support.design.internal.BottomNavigationMenuView,com.google.android.material.bottomnavigation.BottomNavigationMenuView
 android.support.design.widget.FloatingActionButton,com.google.android.material.floatingactionbutton.FloatingActionButton
 android.support.design.widget.TextInputLayout,com.google.android.material.textfield.TextInputLayout
 android.support.design.widget.Lunchbar,com.google.android.material.snackbar.Lunchbar
 android.support.design.widget.Snackbar,com.google.android.material.snackbar.Snackbar
 android.support.design.widget.TransientBottom,com.google.android.material.snackbar.BaseTransientBottomBar
+android.support.design.widget.NavigationView,com.google.android.material.navigation.NavigationView
+android.support.design.widget.BottomSheetDialog,com.google.android.material.bottomsheet.BottomSheetDialog
+android.support.design.widget.BottomSheetBehavior,com.google.android.material.bottomsheet.BottomSheetBehavior
+android.support.design.widget.AppBarLayout,com.google.android.material.appbar.AppBarLayout
+android.support.design.widget.CollapsingToolbarLayout,com.google.android.material.appbar.CollapsingToolbarLayout
+android.support.design.widget.TabLayout,com.google.android.material.tabs.TabLayout

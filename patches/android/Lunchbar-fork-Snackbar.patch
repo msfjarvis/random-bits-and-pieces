@@ -1,0 +1,1302 @@
+From 3eaa7aece43dc509f2751d00838d0f6bf15f32e3 Mon Sep 17 00:00:00 2001
+From: Harsh Shandilya <harsh@prjkt.io>
+Date: Mon, 13 Aug 2018 11:19:06 +0530
+Subject: [PATCH 1/1] Lunchbar: Fork of Snackbar
+
+When enabling an accessibility service, the transition stops working. This forked
+copy fixes this issue by forcing the animation to always be active.
+
+NOTE: These classes have been refactored to use AndroidX.
+
+https://code.google.com/p/android/issues/detail?id=206416
+
+Signed-off-by: Harsh Shandilya <harsh@prjkt.io>
+---
+ .../snackbar/BaseTransientBottomBar.java      | 848 ++++++++++++++++++
+ .../android/material/snackbar/Lunchbar.java   | 419 +++++++++
+ 2 files changed, 1267 insertions(+)
+ create mode 100644 app/src/main/java/com/google/android/material/snackbar/BaseTransientBottomBar.java
+ create mode 100644 app/src/main/java/com/google/android/material/snackbar/Lunchbar.java
+
+diff --git a/app/src/main/java/com/google/android/material/snackbar/BaseTransientBottomBar.java b/app/src/main/java/com/google/android/material/snackbar/BaseTransientBottomBar.java
+new file mode 100644
+index 000000000000..82e8b7fb37b2
+--- /dev/null
++++ b/app/src/main/java/com/google/android/material/snackbar/BaseTransientBottomBar.java
+@@ -0,0 +1,848 @@
++/*
++ * Copyright (C) 2015 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.google.android.material.snackbar;
++
++import com.google.android.material.R;
++
++import static androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP;
++import static com.google.android.material.animation.AnimationUtils.FAST_OUT_SLOW_IN_INTERPOLATOR;
++
++import android.accessibilityservice.AccessibilityServiceInfo;
++import android.animation.Animator;
++import android.animation.AnimatorListenerAdapter;
++import android.animation.ValueAnimator;
++import android.annotation.SuppressLint;
++import android.content.Context;
++import android.content.res.TypedArray;
++import android.os.Build;
++import android.os.Build.VERSION_CODES;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Looper;
++import android.os.Message;
++import androidx.annotation.IntDef;
++import androidx.annotation.IntRange;
++import androidx.annotation.LayoutRes;
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.annotation.RestrictTo;
++import com.google.android.material.behavior.SwipeDismissBehavior;
++import com.google.android.material.internal.ThemeEnforcement;
++import androidx.coordinatorlayout.widget.CoordinatorLayout;
++import androidx.core.view.AccessibilityDelegateCompat;
++import androidx.core.view.ViewCompat;
++import androidx.core.view.WindowInsetsCompat;
++import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
++import android.util.AttributeSet;
++import android.view.Gravity;
++import android.view.LayoutInflater;
++import android.view.MotionEvent;
++import android.view.View;
++import android.view.ViewGroup;
++import android.view.ViewGroup.LayoutParams;
++import android.view.ViewGroup.MarginLayoutParams;
++import android.view.ViewParent;
++import android.view.accessibility.AccessibilityManager;
++import android.widget.FrameLayout;
++import java.lang.annotation.Retention;
++import java.lang.annotation.RetentionPolicy;
++import java.util.ArrayList;
++import java.util.List;
++
++/**
++ * Base class for lightweight transient bars that are displayed along the bottom edge of the
++ * application window.
++ *
++ * @param <B> The transient bottom bar subclass.
++ */
++public abstract class BaseTransientBottomBar<B extends BaseTransientBottomBar<B>> {
++  /**
++   * Base class for {@link BaseTransientBottomBar} callbacks.
++   *
++   * @param <B> The transient bottom bar subclass.
++   * @see BaseTransientBottomBar#addCallback(BaseCallback)
++   */
++  public abstract static class BaseCallback<B> {
++    /** Indicates that the Snackbar was dismissed via a swipe. */
++    public static final int DISMISS_EVENT_SWIPE = 0;
++    /** Indicates that the Snackbar was dismissed via an action click. */
++    public static final int DISMISS_EVENT_ACTION = 1;
++    /** Indicates that the Snackbar was dismissed via a timeout. */
++    public static final int DISMISS_EVENT_TIMEOUT = 2;
++    /** Indicates that the Snackbar was dismissed via a call to {@link #dismiss()}. */
++    public static final int DISMISS_EVENT_MANUAL = 3;
++    /** Indicates that the Snackbar was dismissed from a new Snackbar being shown. */
++    public static final int DISMISS_EVENT_CONSECUTIVE = 4;
++
++    /** @hide */
++    @RestrictTo(LIBRARY_GROUP)
++    @IntDef({
++      DISMISS_EVENT_SWIPE,
++      DISMISS_EVENT_ACTION,
++      DISMISS_EVENT_TIMEOUT,
++      DISMISS_EVENT_MANUAL,
++      DISMISS_EVENT_CONSECUTIVE
++    })
++    @Retention(RetentionPolicy.SOURCE)
++    public @interface DismissEvent {}
++
++    /**
++     * Called when the given {@link BaseTransientBottomBar} has been dismissed, either through a
++     * time-out, having been manually dismissed, or an action being clicked.
++     *
++     * @param transientBottomBar The transient bottom bar which has been dismissed.
++     * @param event The event which caused the dismissal. One of either: {@link
++     *     #DISMISS_EVENT_SWIPE}, {@link #DISMISS_EVENT_ACTION}, {@link #DISMISS_EVENT_TIMEOUT},
++     *     {@link #DISMISS_EVENT_MANUAL} or {@link #DISMISS_EVENT_CONSECUTIVE}.
++     * @see BaseTransientBottomBar#dismiss()
++     */
++    public void onDismissed(B transientBottomBar, @DismissEvent int event) {
++      // empty
++    }
++
++    /**
++     * Called when the given {@link BaseTransientBottomBar} is visible.
++     *
++     * @param transientBottomBar The transient bottom bar which is now visible.
++     * @see BaseTransientBottomBar#show()
++     */
++    public void onShown(B transientBottomBar) {
++      // empty
++    }
++  }
++
++  /**
++   * Interface that defines the behavior of the main content of a transient bottom bar.
++   *
++   * @deprecated Use {@link com.google.android.material.snackbar.ContentViewCallback} instead.
++   */
++  @Deprecated
++  public interface ContentViewCallback
++      extends com.google.android.material.snackbar.ContentViewCallback {}
++
++  /** @hide */
++  @RestrictTo(LIBRARY_GROUP)
++  @IntDef({LENGTH_INDEFINITE, LENGTH_SHORT, LENGTH_LONG})
++  @IntRange(from = 1)
++  @Retention(RetentionPolicy.SOURCE)
++  public @interface Duration {}
++
++  /**
++   * Show the Snackbar indefinitely. This means that the Snackbar will be displayed from the time
++   * that is {@link #show() shown} until either it is dismissed, or another Snackbar is shown.
++   *
++   * @see #setDuration
++   */
++  public static final int LENGTH_INDEFINITE = -2;
++
++  /**
++   * Show the Snackbar for a short period of time.
++   *
++   * @see #setDuration
++   */
++  public static final int LENGTH_SHORT = -1;
++
++  /**
++   * Show the Snackbar for a long period of time.
++   *
++   * @see #setDuration
++   */
++  public static final int LENGTH_LONG = 0;
++
++  static final int ANIMATION_DURATION = 250;
++  static final int ANIMATION_FADE_DURATION = 180;
++
++  static final Handler handler;
++  static final int MSG_SHOW = 0;
++  static final int MSG_DISMISS = 1;
++
++  // On JB/KK versions of the platform sometimes View.setTranslationY does not result in
++  // layout / draw pass, and CoordinatorLayout relies on a draw pass to happen to sync vertical
++  // positioning of all its child views
++  private static final boolean USE_OFFSET_API =
++      (Build.VERSION.SDK_INT >= VERSION_CODES.JELLY_BEAN)
++          && (Build.VERSION.SDK_INT <= VERSION_CODES.KITKAT);
++
++  private static final int[] SNACKBAR_STYLE_ATTR = new int[] {R.attr.snackbarStyle};
++
++  static {
++    handler =
++        new Handler(
++            Looper.getMainLooper(),
++            new Handler.Callback() {
++              @Override
++              public boolean handleMessage(Message message) {
++                switch (message.what) {
++                  case MSG_SHOW:
++                    ((BaseTransientBottomBar) message.obj).showView();
++                    return true;
++                  case MSG_DISMISS:
++                    ((BaseTransientBottomBar) message.obj).hideView(message.arg1);
++                    return true;
++                  default:
++                    return false;
++                }
++              }
++            });
++  }
++
++  private final ViewGroup targetParent;
++  private final Context context;
++  protected final SnackbarBaseLayout view;
++  private final com.google.android.material.snackbar.ContentViewCallback contentViewCallback;
++  private int duration;
++
++  private List<BaseCallback<B>> callbacks;
++
++  private BaseTransientBottomBar.Behavior behavior;
++
++  private final AccessibilityManager accessibilityManager;
++
++  /** @hide */
++  // TODO: make package private after the widget migration is finished
++  @RestrictTo(LIBRARY_GROUP)
++  protected interface OnLayoutChangeListener {
++    void onLayoutChange(View view, int left, int top, int right, int bottom);
++  }
++
++  /** @hide */
++  // TODO: make package private after the widget migration is finished
++  @RestrictTo(LIBRARY_GROUP)
++  protected interface OnAttachStateChangeListener {
++    void onViewAttachedToWindow(View v);
++
++    void onViewDetachedFromWindow(View v);
++  }
++
++  /**
++   * Constructor for the transient bottom bar.
++   *
++   * @param parent The parent for this transient bottom bar.
++   * @param content The content view for this transient bottom bar.
++   * @param contentViewCallback The content view callback for this transient bottom bar.
++   */
++  protected BaseTransientBottomBar(
++      @NonNull ViewGroup parent,
++      @NonNull View content,
++      @NonNull com.google.android.material.snackbar.ContentViewCallback contentViewCallback) {
++    if (parent == null) {
++      throw new IllegalArgumentException("Transient bottom bar must have non-null parent");
++    }
++    if (content == null) {
++      throw new IllegalArgumentException("Transient bottom bar must have non-null content");
++    }
++    if (contentViewCallback == null) {
++      throw new IllegalArgumentException("Transient bottom bar must have non-null callback");
++    }
++
++    targetParent = parent;
++    this.contentViewCallback = contentViewCallback;
++    context = parent.getContext();
++
++    ThemeEnforcement.checkAppCompatTheme(context);
++
++    LayoutInflater inflater = LayoutInflater.from(context);
++    // Note that for backwards compatibility reasons we inflate a layout that is defined
++    // in the extending Snackbar class. This is to prevent breakage of apps that have custom
++    // coordinator layout behaviors that depend on that layout.
++    view = (SnackbarBaseLayout) inflater.inflate(getSnackbarBaseLayoutResId(), targetParent, false);
++    view.addView(content);
++
++    ViewCompat.setAccessibilityLiveRegion(view, ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE);
++    ViewCompat.setImportantForAccessibility(view, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_YES);
++
++    // Make sure that we fit system windows and have a listener to apply any insets
++    ViewCompat.setFitsSystemWindows(view, true);
++    ViewCompat.setOnApplyWindowInsetsListener(
++        view,
++        new androidx.core.view.OnApplyWindowInsetsListener() {
++          @Override
++          public WindowInsetsCompat onApplyWindowInsets(View v, WindowInsetsCompat insets) {
++            // Copy over the bottom inset as padding so that we're displayed
++            // above the navigation bar
++            v.setPadding(
++                v.getPaddingLeft(),
++                v.getPaddingTop(),
++                v.getPaddingRight(),
++                insets.getSystemWindowInsetBottom());
++            return insets;
++          }
++        });
++
++    // Handle accessibility events
++    ViewCompat.setAccessibilityDelegate(
++        view,
++        new AccessibilityDelegateCompat() {
++          @Override
++          public void onInitializeAccessibilityNodeInfo(
++              View host, AccessibilityNodeInfoCompat info) {
++            super.onInitializeAccessibilityNodeInfo(host, info);
++            info.addAction(AccessibilityNodeInfoCompat.ACTION_DISMISS);
++            info.setDismissable(true);
++          }
++
++          @Override
++          public boolean performAccessibilityAction(View host, int action, Bundle args) {
++            if (action == AccessibilityNodeInfoCompat.ACTION_DISMISS) {
++              dismiss();
++              return true;
++            }
++            return super.performAccessibilityAction(host, action, args);
++          }
++        });
++
++    accessibilityManager =
++        (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
++  }
++
++  @LayoutRes
++  protected int getSnackbarBaseLayoutResId() {
++    return hasSnackbarStyleAttr() ? R.layout.mtrl_layout_snackbar : R.layout.design_layout_snackbar;
++  }
++
++  /**
++   * {@link Snackbar}s should still work with AppCompat themes, which don't specify a {@code
++   * snackbarStyle}. This method helps to check if a valid {@code snackbarStyle} is set within the
++   * current context, so that we know whether we can use the attribute.
++   */
++  protected boolean hasSnackbarStyleAttr() {
++    TypedArray a = context.obtainStyledAttributes(SNACKBAR_STYLE_ATTR);
++    int snackbarStyleResId = a.getResourceId(0, -1);
++    a.recycle();
++    return snackbarStyleResId != -1;
++  }
++
++  /**
++   * Set how long to show the view for.
++   *
++   * @param duration How long to display the message. Can be {@link #LENGTH_SHORT}, {@link
++   *     #LENGTH_LONG}, {@link #LENGTH_INDEFINITE}, or a custom duration in milliseconds.
++   */
++  @NonNull
++  public B setDuration(@Duration int duration) {
++    this.duration = duration;
++    return (B) this;
++  }
++
++  /**
++   * Return the duration.
++   *
++   * @see #setDuration
++   */
++  @Duration
++  public int getDuration() {
++    return duration;
++  }
++
++  /**
++   * Sets the {@link BaseTransientBottomBar.Behavior} to be used in this {@link
++   * BaseTransientBottomBar}.
++   *
++   * @param behavior {@link BaseTransientBottomBar.Behavior} to be applied.
++   */
++  public B setBehavior(BaseTransientBottomBar.Behavior behavior) {
++    this.behavior = behavior;
++    return (B) this;
++  }
++
++  /**
++   * Return the behavior.
++   *
++   * @see #setBehavior(BaseTransientBottomBar.Behavior)
++   */
++  public BaseTransientBottomBar.Behavior getBehavior() {
++    return behavior;
++  }
++
++  /** Returns the {@link BaseTransientBottomBar}'s context. */
++  @NonNull
++  public Context getContext() {
++    return context;
++  }
++
++  /** Returns the {@link BaseTransientBottomBar}'s view. */
++  @NonNull
++  public View getView() {
++    return view;
++  }
++
++  /** Show the {@link BaseTransientBottomBar}. */
++  public void show() {
++    SnackbarManager.getInstance().show(getDuration(), managerCallback);
++  }
++
++  /** Dismiss the {@link BaseTransientBottomBar}. */
++  public void dismiss() {
++    dispatchDismiss(BaseCallback.DISMISS_EVENT_MANUAL);
++  }
++
++  protected void dispatchDismiss(@BaseCallback.DismissEvent int event) {
++    SnackbarManager.getInstance().dismiss(managerCallback, event);
++  }
++
++  /**
++   * Adds the specified callback to the list of callbacks that will be notified of transient bottom
++   * bar events.
++   *
++   * @param callback Callback to notify when transient bottom bar events occur.
++   * @see #removeCallback(BaseCallback)
++   */
++  @NonNull
++  public B addCallback(@NonNull BaseCallback<B> callback) {
++    if (callback == null) {
++      return (B) this;
++    }
++    if (callbacks == null) {
++      callbacks = new ArrayList<BaseCallback<B>>();
++    }
++    callbacks.add(callback);
++    return (B) this;
++  }
++
++  /**
++   * Removes the specified callback from the list of callbacks that will be notified of transient
++   * bottom bar events.
++   *
++   * @param callback Callback to remove from being notified of transient bottom bar events
++   * @see #addCallback(BaseCallback)
++   */
++  @NonNull
++  public B removeCallback(@NonNull BaseCallback<B> callback) {
++    if (callback == null) {
++      return (B) this;
++    }
++    if (callbacks == null) {
++      // This can happen if this method is called before the first call to addCallback
++      return (B) this;
++    }
++    callbacks.remove(callback);
++    return (B) this;
++  }
++
++  /** Return whether this {@link BaseTransientBottomBar} is currently being shown. */
++  public boolean isShown() {
++    return SnackbarManager.getInstance().isCurrent(managerCallback);
++  }
++
++  /**
++   * Returns whether this {@link BaseTransientBottomBar} is currently being shown, or is queued to
++   * be shown next.
++   */
++  public boolean isShownOrQueued() {
++    return SnackbarManager.getInstance().isCurrentOrNext(managerCallback);
++  }
++
++  final SnackbarManager.Callback managerCallback =
++      new SnackbarManager.Callback() {
++        @Override
++        public void show() {
++          handler.sendMessage(handler.obtainMessage(MSG_SHOW, BaseTransientBottomBar.this));
++        }
++
++        @Override
++        public void dismiss(int event) {
++          handler.sendMessage(
++              handler.obtainMessage(MSG_DISMISS, event, 0, BaseTransientBottomBar.this));
++        }
++      };
++
++  protected SwipeDismissBehavior<? extends View> getNewBehavior() {
++    return new Behavior();
++  }
++
++  final void showView() {
++    if (this.view.getParent() == null) {
++      final ViewGroup.LayoutParams lp = this.view.getLayoutParams();
++
++      if (lp instanceof CoordinatorLayout.LayoutParams) {
++        // If our LayoutParams are from a CoordinatorLayout, we'll setup our Behavior
++        final CoordinatorLayout.LayoutParams clp = (CoordinatorLayout.LayoutParams) lp;
++
++        final SwipeDismissBehavior<? extends View> behavior =
++            this.behavior == null ? getNewBehavior() : this.behavior;
++
++        if (behavior instanceof BaseTransientBottomBar.Behavior) {
++          ((BaseTransientBottomBar.Behavior) behavior).setBaseTransientBottomBar(this);
++        }
++        behavior.setListener(
++            new SwipeDismissBehavior.OnDismissListener() {
++              @Override
++              public void onDismiss(View view) {
++                view.setVisibility(View.GONE);
++                dispatchDismiss(BaseCallback.DISMISS_EVENT_SWIPE);
++              }
++
++              @Override
++              public void onDragStateChanged(int state) {
++                switch (state) {
++                  case SwipeDismissBehavior.STATE_DRAGGING:
++                  case SwipeDismissBehavior.STATE_SETTLING:
++                    // If the view is being dragged or settling, pause the timeout
++                    SnackbarManager.getInstance().pauseTimeout(managerCallback);
++                    break;
++                  case SwipeDismissBehavior.STATE_IDLE:
++                    // If the view has been released and is idle, restore the timeout
++                    SnackbarManager.getInstance().restoreTimeoutIfPaused(managerCallback);
++                    break;
++                  default:
++                    // Any other state is ignored
++                }
++              }
++            });
++        clp.setBehavior(behavior);
++        // Also set the inset edge so that views can dodge the bar correctly
++        clp.insetEdge = Gravity.BOTTOM;
++      }
++
++      targetParent.addView(this.view);
++    }
++
++    this.view.setOnAttachStateChangeListener(
++        new BaseTransientBottomBar.OnAttachStateChangeListener() {
++          @Override
++          public void onViewAttachedToWindow(View v) {}
++
++          @Override
++          public void onViewDetachedFromWindow(View v) {
++            if (isShownOrQueued()) {
++              // If we haven't already been dismissed then this event is coming from a
++              // non-user initiated action. Hence we need to make sure that we callback
++              // and keep our state up to date. We need to post the call since
++              // removeView() will call through to onDetachedFromWindow and thus overflow.
++              handler.post(
++                  new Runnable() {
++                    @Override
++                    public void run() {
++                      onViewHidden(BaseCallback.DISMISS_EVENT_MANUAL);
++                    }
++                  });
++            }
++          }
++        });
++
++    if (ViewCompat.isLaidOut(this.view)) {
++      if (shouldAnimate()) {
++        // If animations are enabled, animate it in
++        animateViewIn();
++      } else {
++        // Else if anims are disabled just call back now
++        onViewShown();
++      }
++    } else {
++      // Otherwise, add one of our layout change listeners and show it in when laid out
++      this.view.setOnLayoutChangeListener(
++          new BaseTransientBottomBar.OnLayoutChangeListener() {
++            @Override
++            public void onLayoutChange(View view, int left, int top, int right, int bottom) {
++              BaseTransientBottomBar.this.view.setOnLayoutChangeListener(null);
++
++              if (shouldAnimate()) {
++                // If animations are enabled, animate it in
++                animateViewIn();
++              } else {
++                // Else if anims are disabled just call back now
++                onViewShown();
++              }
++            }
++          });
++    }
++  }
++
++  void animateViewIn() {
++    final int translationYBottom = getTranslationYBottom();
++    if (USE_OFFSET_API) {
++      ViewCompat.offsetTopAndBottom(view, translationYBottom);
++    } else {
++      view.setTranslationY(translationYBottom);
++    }
++
++    final ValueAnimator animator = new ValueAnimator();
++    animator.setIntValues(translationYBottom, 0);
++    animator.setInterpolator(FAST_OUT_SLOW_IN_INTERPOLATOR);
++    animator.setDuration(ANIMATION_DURATION);
++    animator.addListener(
++        new AnimatorListenerAdapter() {
++          @Override
++          public void onAnimationStart(Animator animator) {
++            contentViewCallback.animateContentIn(
++                ANIMATION_DURATION - ANIMATION_FADE_DURATION, ANIMATION_FADE_DURATION);
++          }
++
++          @Override
++          public void onAnimationEnd(Animator animator) {
++            onViewShown();
++          }
++        });
++    animator.addUpdateListener(
++        new ValueAnimator.AnimatorUpdateListener() {
++          private int previousAnimatedIntValue = translationYBottom;
++
++          @Override
++          public void onAnimationUpdate(ValueAnimator animator) {
++            int currentAnimatedIntValue = (int) animator.getAnimatedValue();
++            if (USE_OFFSET_API) {
++              // On JB/KK versions of the platform sometimes View.setTranslationY does not
++              // result in layout / draw pass
++              ViewCompat.offsetTopAndBottom(
++                  view, currentAnimatedIntValue - previousAnimatedIntValue);
++            } else {
++              view.setTranslationY(currentAnimatedIntValue);
++            }
++            previousAnimatedIntValue = currentAnimatedIntValue;
++          }
++        });
++    animator.start();
++  }
++
++  private void animateViewOut(final int event) {
++    final ValueAnimator animator = new ValueAnimator();
++    animator.setIntValues(0, getTranslationYBottom());
++    animator.setInterpolator(FAST_OUT_SLOW_IN_INTERPOLATOR);
++    animator.setDuration(ANIMATION_DURATION);
++    animator.addListener(
++        new AnimatorListenerAdapter() {
++          @Override
++          public void onAnimationStart(Animator animator) {
++            contentViewCallback.animateContentOut(0, ANIMATION_FADE_DURATION);
++          }
++
++          @Override
++          public void onAnimationEnd(Animator animator) {
++            onViewHidden(event);
++          }
++        });
++    animator.addUpdateListener(
++        new ValueAnimator.AnimatorUpdateListener() {
++          private int previousAnimatedIntValue = 0;
++
++          @Override
++          public void onAnimationUpdate(ValueAnimator animator) {
++            int currentAnimatedIntValue = (int) animator.getAnimatedValue();
++            if (USE_OFFSET_API) {
++              // On JB/KK versions of the platform sometimes View.setTranslationY does not
++              // result in layout / draw pass
++              ViewCompat.offsetTopAndBottom(
++                  view, currentAnimatedIntValue - previousAnimatedIntValue);
++            } else {
++              view.setTranslationY(currentAnimatedIntValue);
++            }
++            previousAnimatedIntValue = currentAnimatedIntValue;
++          }
++        });
++    animator.start();
++  }
++
++  private int getTranslationYBottom() {
++    int translationY = view.getHeight();
++    LayoutParams layoutParams = view.getLayoutParams();
++    if (layoutParams instanceof MarginLayoutParams) {
++      translationY += ((MarginLayoutParams) layoutParams).bottomMargin;
++    }
++    return translationY;
++  }
++
++  final void hideView(@BaseCallback.DismissEvent final int event) {
++    if (shouldAnimate() && view.getVisibility() == View.VISIBLE) {
++      animateViewOut(event);
++    } else {
++      // If anims are disabled or the view isn't visible, just call back now
++      onViewHidden(event);
++    }
++  }
++
++  void onViewShown() {
++    SnackbarManager.getInstance().onShown(managerCallback);
++    if (callbacks != null) {
++      // Notify the callbacks. Do that from the end of the list so that if a callback
++      // removes itself as the result of being called, it won't mess up with our iteration
++      int callbackCount = callbacks.size();
++      for (int i = callbackCount - 1; i >= 0; i--) {
++        callbacks.get(i).onShown((B) this);
++      }
++    }
++  }
++
++  void onViewHidden(int event) {
++    // First tell the SnackbarManager that it has been dismissed
++    SnackbarManager.getInstance().onDismissed(managerCallback);
++    if (callbacks != null) {
++      // Notify the callbacks. Do that from the end of the list so that if a callback
++      // removes itself as the result of being called, it won't mess up with our iteration
++      int callbackCount = callbacks.size();
++      for (int i = callbackCount - 1; i >= 0; i--) {
++        callbacks.get(i).onDismissed((B) this, event);
++      }
++    }
++    // Lastly, hide and remove the view from the parent (if attached)
++    final ViewParent parent = view.getParent();
++    if (parent instanceof ViewGroup) {
++      ((ViewGroup) parent).removeView(view);
++    }
++  }
++
++  /** Returns true if we should animate the Snackbar view in/out. */
++  boolean shouldAnimate() {
++    return true;
++    /**
++    final int feedbackFlags = AccessibilityServiceInfo.FEEDBACK_SPOKEN;
++    List<AccessibilityServiceInfo> serviceList =
++        accessibilityManager.getEnabledAccessibilityServiceList(feedbackFlags);
++    return serviceList != null && serviceList.isEmpty();
++    */
++  }
++
++  /** @hide */
++  @RestrictTo(LIBRARY_GROUP)
++  protected static class SnackbarBaseLayout extends FrameLayout {
++
++    private static final OnTouchListener consumeAllTouchListener =
++        new OnTouchListener() {
++          @SuppressLint("ClickableViewAccessibility")
++          @Override
++          public boolean onTouch(View v, MotionEvent event) {
++            // Prevent touches from passing through this view.
++            return true;
++          }
++        };
++
++    private BaseTransientBottomBar.OnLayoutChangeListener onLayoutChangeListener;
++    private BaseTransientBottomBar.OnAttachStateChangeListener onAttachStateChangeListener;
++
++    protected SnackbarBaseLayout(Context context) {
++      this(context, null);
++    }
++
++    protected SnackbarBaseLayout(Context context, AttributeSet attrs) {
++      super(context, attrs);
++      TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.SnackbarLayout);
++      if (a.hasValue(R.styleable.SnackbarLayout_elevation)) {
++        ViewCompat.setElevation(
++            this, a.getDimensionPixelSize(R.styleable.SnackbarLayout_elevation, 0));
++      }
++      a.recycle();
++
++      setOnTouchListener(consumeAllTouchListener);
++      setFocusable(true);
++    }
++
++    @Override
++    public void setOnClickListener(@Nullable OnClickListener onClickListener) {
++      // Clear touch listener that consumes all touches if there is a custom click listener.
++      setOnTouchListener(onClickListener != null ? null : consumeAllTouchListener);
++      super.setOnClickListener(onClickListener);
++    }
++
++    @Override
++    protected void onLayout(boolean changed, int l, int t, int r, int b) {
++      super.onLayout(changed, l, t, r, b);
++      if (onLayoutChangeListener != null) {
++        onLayoutChangeListener.onLayoutChange(this, l, t, r, b);
++      }
++    }
++
++    @Override
++    protected void onAttachedToWindow() {
++      super.onAttachedToWindow();
++      if (onAttachStateChangeListener != null) {
++        onAttachStateChangeListener.onViewAttachedToWindow(this);
++      }
++
++      ViewCompat.requestApplyInsets(this);
++    }
++
++    @Override
++    protected void onDetachedFromWindow() {
++      super.onDetachedFromWindow();
++      if (onAttachStateChangeListener != null) {
++        onAttachStateChangeListener.onViewDetachedFromWindow(this);
++      }
++    }
++
++    void setOnLayoutChangeListener(
++        BaseTransientBottomBar.OnLayoutChangeListener onLayoutChangeListener) {
++      this.onLayoutChangeListener = onLayoutChangeListener;
++    }
++
++    void setOnAttachStateChangeListener(
++        BaseTransientBottomBar.OnAttachStateChangeListener listener) {
++      onAttachStateChangeListener = listener;
++    }
++  }
++
++  /** Behavior for {@link BaseTransientBottomBar}. */
++  public static class Behavior extends SwipeDismissBehavior<View> {
++    private final BehaviorDelegate delegate;
++
++    public Behavior() {
++      delegate = new BehaviorDelegate(this);
++    }
++
++    private void setBaseTransientBottomBar(BaseTransientBottomBar<?> baseTransientBottomBar) {
++      delegate.setBaseTransientBottomBar(baseTransientBottomBar);
++    }
++
++    @Override
++    public boolean canSwipeDismissView(View child) {
++      return delegate.canSwipeDismissView(child);
++    }
++
++    @Override
++    public boolean onInterceptTouchEvent(CoordinatorLayout parent, View child, MotionEvent event) {
++      delegate.onInterceptTouchEvent(parent, child, event);
++      return super.onInterceptTouchEvent(parent, child, event);
++    }
++  }
++
++  /** @hide */
++  @RestrictTo(LIBRARY_GROUP)
++  // TODO: Delegate can be rolled up into behavior after the widget migration is finished.
++  public static class BehaviorDelegate {
++    private SnackbarManager.Callback managerCallback;
++
++    public BehaviorDelegate(SwipeDismissBehavior<?> behavior) {
++      behavior.setStartAlphaSwipeDistance(0.1f);
++      behavior.setEndAlphaSwipeDistance(0.6f);
++      behavior.setSwipeDirection(SwipeDismissBehavior.SWIPE_DIRECTION_START_TO_END);
++    }
++
++    public void setBaseTransientBottomBar(BaseTransientBottomBar<?> baseTransientBottomBar) {
++      this.managerCallback = baseTransientBottomBar.managerCallback;
++    }
++
++    public boolean canSwipeDismissView(View child) {
++      return child instanceof SnackbarBaseLayout;
++    }
++
++    public void onInterceptTouchEvent(CoordinatorLayout parent, View child, MotionEvent event) {
++      switch (event.getActionMasked()) {
++        case MotionEvent.ACTION_DOWN:
++          // We want to make sure that we disable any Snackbar timeouts if the user is
++          // currently touching the Snackbar. We restore the timeout when complete
++          if (parent.isPointInChildBounds(child, (int) event.getX(), (int) event.getY())) {
++            SnackbarManager.getInstance().pauseTimeout(managerCallback);
++          }
++          break;
++        case MotionEvent.ACTION_UP:
++        case MotionEvent.ACTION_CANCEL:
++          SnackbarManager.getInstance().restoreTimeoutIfPaused(managerCallback);
++          break;
++        default:
++          break;
++      }
++    }
++  }
++}
+diff --git a/app/src/main/java/com/google/android/material/snackbar/Lunchbar.java b/app/src/main/java/com/google/android/material/snackbar/Lunchbar.java
+new file mode 100644
+index 000000000000..8046c997d803
+--- /dev/null
++++ b/app/src/main/java/com/google/android/material/snackbar/Lunchbar.java
+@@ -0,0 +1,419 @@
++/*
++ * Copyright (C) 2015 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package com.google.android.material.snackbar;
++
++import com.google.android.material.R;
++
++import static androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP;
++
++import android.content.Context;
++import android.content.res.ColorStateList;
++import android.content.res.TypedArray;
++import androidx.annotation.ColorInt;
++import androidx.annotation.IntDef;
++import androidx.annotation.IntRange;
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.annotation.RestrictTo;
++import androidx.annotation.StringRes;
++import androidx.coordinatorlayout.widget.CoordinatorLayout;
++import android.text.TextUtils;
++import android.util.AttributeSet;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.view.ViewParent;
++import android.view.accessibility.AccessibilityManager;
++import android.widget.FrameLayout;
++import android.widget.TextView;
++import java.lang.annotation.Retention;
++import java.lang.annotation.RetentionPolicy;
++
++/**
++ * Snackbars provide lightweight feedback about an operation. They show a brief message at the
++ * bottom of the screen on mobile and lower left on larger devices. Snackbars appear above all other
++ * elements on screen and only one can be displayed at a time.
++ *
++ * <p>They automatically disappear after a timeout or after user interaction elsewhere on the
++ * screen, particularly after interactions that summon a new surface or activity. Snackbars can be
++ * swiped off screen.
++ *
++ * <p>Snackbars can contain an action which is set via {@link #setAction(CharSequence,
++ * android.view.View.OnClickListener)}.
++ *
++ * <p>To be notified when a snackbar has been shown or dismissed, you can provide a {@link Callback}
++ * via {@link BaseTransientBottomBar#addCallback(BaseCallback)}.
++ */
++public final class Lunchbar extends BaseTransientBottomBar<Lunchbar> {
++
++  private final AccessibilityManager accessibilityManager;
++  private boolean hasAction;
++
++  /** @hide */
++  @RestrictTo(LIBRARY_GROUP)
++  @IntDef({LENGTH_INDEFINITE, LENGTH_SHORT, LENGTH_LONG})
++  @IntRange(from = 1)
++  @Retention(RetentionPolicy.SOURCE)
++  public @interface Duration {}
++
++  /**
++   * Show the Snackbar indefinitely. This means that the Snackbar will be displayed from the time
++   * that is {@link #show() shown} until either it is dismissed, or another Snackbar is shown.
++   *
++   * @see #setDuration
++   */
++  public static final int LENGTH_INDEFINITE = BaseTransientBottomBar.LENGTH_INDEFINITE;
++
++  /**
++   * Show the Snackbar for a short period of time.
++   *
++   * @see #setDuration
++   */
++  public static final int LENGTH_SHORT = BaseTransientBottomBar.LENGTH_SHORT;
++
++  /**
++   * Show the Snackbar for a long period of time.
++   *
++   * @see #setDuration
++   */
++  public static final int LENGTH_LONG = BaseTransientBottomBar.LENGTH_LONG;
++
++  private static final int[] SNACKBAR_BUTTON_STYLE_ATTR = new int[] {R.attr.snackbarButtonStyle};
++
++  /**
++   * Callback class for {@link Snackbar} instances.
++   *
++   * <p>Note: this class is here to provide backwards-compatible way for apps written before the
++   * existence of the base {@link BaseTransientBottomBar} class.
++   *
++   * @see BaseTransientBottomBar#addCallback(BaseCallback)
++   */
++  public static class Callback extends BaseCallback<Lunchbar> {
++    /** Indicates that the Snackbar was dismissed via a swipe. */
++    public static final int DISMISS_EVENT_SWIPE = BaseCallback.DISMISS_EVENT_SWIPE;
++    /** Indicates that the Snackbar was dismissed via an action click. */
++    public static final int DISMISS_EVENT_ACTION = BaseCallback.DISMISS_EVENT_ACTION;
++    /** Indicates that the Snackbar was dismissed via a timeout. */
++    public static final int DISMISS_EVENT_TIMEOUT = BaseCallback.DISMISS_EVENT_TIMEOUT;
++    /** Indicates that the Snackbar was dismissed via a call to {@link #dismiss()}. */
++    public static final int DISMISS_EVENT_MANUAL = BaseCallback.DISMISS_EVENT_MANUAL;
++    /** Indicates that the Snackbar was dismissed from a new Snackbar being shown. */
++    public static final int DISMISS_EVENT_CONSECUTIVE = BaseCallback.DISMISS_EVENT_CONSECUTIVE;
++
++    @Override
++    public void onShown(Lunchbar sb) {
++      // Stub implementation to make API check happy.
++    }
++
++    @Override
++    public void onDismissed(Lunchbar transientBottomBar, @DismissEvent int event) {
++      // Stub implementation to make API check happy.
++    }
++  }
++
++  @Nullable private BaseCallback<Lunchbar> callback;
++
++  private Lunchbar(
++      ViewGroup parent,
++      View content,
++      com.google.android.material.snackbar.ContentViewCallback contentViewCallback) {
++    super(parent, content, contentViewCallback);
++    accessibilityManager =
++        (AccessibilityManager) parent.getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
++  }
++
++  // TODO: Delete this once custom Robolectric shadows no longer depend on this method being present
++  // (and instead properly utilize BaseTransientBottomBar hierarchy).
++  @Override
++  public void show() {
++    super.show();
++  }
++
++  // TODO: Delete this once custom Robolectric shadows no longer depend on this method being present
++  // (and instead properly utilize BaseTransientBottomBar hierarchy).
++  @Override
++  public void dismiss() {
++    super.dismiss();
++  }
++
++  // TODO: Delete this once custom Robolectric shadows no longer depend on this method being present
++  // (and instead properly utilize BaseTransientBottomBar hierarchy).
++  @Override
++  public boolean isShown() {
++    return super.isShown();
++  }
++
++  /**
++   * Make a Snackbar to display a message
++   *
++   * <p>Snackbar will try and find a parent view to hold Snackbar's view from the value given to
++   * {@code view}. Snackbar will walk up the view tree trying to find a suitable parent, which is
++   * defined as a {@link CoordinatorLayout} or the window decor's content view, whichever comes
++   * first.
++   *
++   * <p>Having a {@link CoordinatorLayout} in your view hierarchy allows Snackbar to enable certain
++   * features, such as swipe-to-dismiss and automatically moving of widgets.
++   *
++   * @param view The view to find a parent from.
++   * @param text The text to show. Can be formatted text.
++   * @param duration How long to display the message. Can be {@link #LENGTH_SHORT}, {@link
++   *     #LENGTH_LONG}, {@link #LENGTH_INDEFINITE}, or a custom duration in milliseconds.
++   */
++  @NonNull
++  public static Lunchbar make(
++      @NonNull View view, @NonNull CharSequence text, @Duration int duration) {
++    final ViewGroup parent = findSuitableParent(view);
++    if (parent == null) {
++      throw new IllegalArgumentException(
++          "No suitable parent found from the given view. Please provide a valid view.");
++    }
++
++    final LayoutInflater inflater = LayoutInflater.from(parent.getContext());
++    final SnackbarContentLayout content =
++        (SnackbarContentLayout)
++            inflater.inflate(
++                hasSnackbarButtonStyleAttr(parent.getContext())
++                    ? R.layout.mtrl_layout_snackbar_include
++                    : R.layout.design_layout_snackbar_include,
++                parent,
++                false);
++    final Lunchbar snackbar = new Lunchbar(parent, content, content);
++    snackbar.setText(text);
++    snackbar.setDuration(duration);
++    return snackbar;
++  }
++
++  /**
++   * {@link Snackbar}s should still work with AppCompat themes, which don't specify a {@code
++   * snackbarButtonStyle}. This method helps to check if a valid {@code snackbarButtonStyle} is set
++   * within the current context, so that we know whether we can use the attribute.
++   */
++  protected static boolean hasSnackbarButtonStyleAttr(Context context) {
++    TypedArray a = context.obtainStyledAttributes(SNACKBAR_BUTTON_STYLE_ATTR);
++    int snackbarButtonStyleResId = a.getResourceId(0, -1);
++    a.recycle();
++    return snackbarButtonStyleResId != -1;
++  }
++
++  /**
++   * Make a Snackbar to display a message.
++   *
++   * <p>Snackbar will try and find a parent view to hold Snackbar's view from the value given to
++   * {@code view}. Snackbar will walk up the view tree trying to find a suitable parent, which is
++   * defined as a {@link CoordinatorLayout} or the window decor's content view, whichever comes
++   * first.
++   *
++   * <p>Having a {@link CoordinatorLayout} in your view hierarchy allows Snackbar to enable certain
++   * features, such as swipe-to-dismiss and automatically moving of widgets.
++   *
++   * @param view The view to find a parent from.
++   * @param resId The resource id of the string resource to use. Can be formatted text.
++   * @param duration How long to display the message. Can be {@link #LENGTH_SHORT}, {@link
++   *     #LENGTH_LONG}, {@link #LENGTH_INDEFINITE}, or a custom duration in milliseconds.
++   */
++  @NonNull
++  public static Lunchbar make(@NonNull View view, @StringRes int resId, @Duration int duration) {
++    return make(view, view.getResources().getText(resId), duration);
++  }
++
++  private static ViewGroup findSuitableParent(View view) {
++    ViewGroup fallback = null;
++    do {
++      if (view instanceof CoordinatorLayout) {
++        // We've found a CoordinatorLayout, use it
++        return (ViewGroup) view;
++      } else if (view instanceof FrameLayout) {
++        if (view.getId() == android.R.id.content) {
++          // If we've hit the decor content view, then we didn't find a CoL in the
++          // hierarchy, so use it.
++          return (ViewGroup) view;
++        } else {
++          // It's not the content view but we'll use it as our fallback
++          fallback = (ViewGroup) view;
++        }
++      }
++
++      if (view != null) {
++        // Else, we will loop and crawl up the view hierarchy and try to find a parent
++        final ViewParent parent = view.getParent();
++        view = parent instanceof View ? (View) parent : null;
++      }
++    } while (view != null);
++
++    // If we reach here then we didn't find a CoL or a suitable content view so we'll fallback
++    return fallback;
++  }
++
++  /**
++   * Update the text in this {@link Snackbar}.
++   *
++   * @param message The new text for this {@link BaseTransientBottomBar}.
++   */
++  @NonNull
++  public Lunchbar setText(@NonNull CharSequence message) {
++    final SnackbarContentLayout contentLayout = (SnackbarContentLayout) view.getChildAt(0);
++    final TextView tv = contentLayout.getMessageView();
++    tv.setText(message);
++    return this;
++  }
++
++  /**
++   * Update the text in this {@link Snackbar}.
++   *
++   * @param resId The new text for this {@link BaseTransientBottomBar}.
++   */
++  @NonNull
++  public Lunchbar setText(@StringRes int resId) {
++    return setText(getContext().getText(resId));
++  }
++
++  /**
++   * Set the action to be displayed in this {@link BaseTransientBottomBar}.
++   *
++   * @param resId String resource to display for the action
++   * @param listener callback to be invoked when the action is clicked
++   */
++  @NonNull
++  public Lunchbar setAction(@StringRes int resId, View.OnClickListener listener) {
++    return setAction(getContext().getText(resId), listener);
++  }
++
++  /**
++   * Set the action to be displayed in this {@link BaseTransientBottomBar}.
++   *
++   * @param text Text to display for the action
++   * @param listener callback to be invoked when the action is clicked
++   */
++  @NonNull
++  public Lunchbar setAction(CharSequence text, final View.OnClickListener listener) {
++    final SnackbarContentLayout contentLayout = (SnackbarContentLayout) this.view.getChildAt(0);
++    final TextView tv = contentLayout.getActionView();
++    if (TextUtils.isEmpty(text) || listener == null) {
++      tv.setVisibility(View.GONE);
++      tv.setOnClickListener(null);
++      hasAction = false;
++    } else {
++      hasAction = true;
++      tv.setVisibility(View.VISIBLE);
++      tv.setText(text);
++      tv.setOnClickListener(
++          new View.OnClickListener() {
++            @Override
++            public void onClick(View view) {
++              listener.onClick(view);
++              // Now dismiss the Snackbar
++              dispatchDismiss(BaseCallback.DISMISS_EVENT_ACTION);
++            }
++          });
++    }
++    return this;
++  }
++
++  @Override
++  public int getDuration() {
++    // If touch exploration is enabled override duration to give people chance to interact.
++    return hasAction && accessibilityManager.isTouchExplorationEnabled()
++        ? BaseTransientBottomBar.LENGTH_INDEFINITE
++        : super.getDuration();
++  }
++
++  /**
++   * Sets the text color of the action specified in {@link #setAction(CharSequence,
++   * View.OnClickListener)}.
++   */
++  @NonNull
++  public Lunchbar setActionTextColor(ColorStateList colors) {
++    final SnackbarContentLayout contentLayout = (SnackbarContentLayout) view.getChildAt(0);
++    final TextView tv = contentLayout.getActionView();
++    tv.setTextColor(colors);
++    return this;
++  }
++
++  /**
++   * Sets the text color of the action specified in {@link #setAction(CharSequence,
++   * View.OnClickListener)}.
++   */
++  @NonNull
++  public Lunchbar setActionTextColor(@ColorInt int color) {
++    final SnackbarContentLayout contentLayout = (SnackbarContentLayout) view.getChildAt(0);
++    final TextView tv = contentLayout.getActionView();
++    tv.setTextColor(color);
++    return this;
++  }
++
++  /**
++   * Set a callback to be called when this the visibility of this {@link Snackbar} changes. Note
++   * that this method is deprecated and you should use {@link #addCallback(BaseCallback)} to add a
++   * callback and {@link #removeCallback(BaseCallback)} to remove a registered callback.
++   *
++   * @param callback Callback to notify when transient bottom bar events occur.
++   * @deprecated Use {@link #addCallback(BaseCallback)}
++   * @see Callback
++   * @see #addCallback(BaseCallback)
++   * @see #removeCallback(BaseCallback)
++   */
++  @Deprecated
++  @NonNull
++  public Lunchbar setCallback(Callback callback) {
++    // The logic in this method emulates what we had before support for multiple
++    // registered callbacks.
++    if (this.callback != null) {
++      removeCallback(this.callback);
++    }
++    if (callback != null) {
++      addCallback(callback);
++    }
++    // Update the deprecated field so that we can remove the passed callback the next
++    // time we're called
++    this.callback = callback;
++    return this;
++  }
++
++  /**
++   * @hide Note: this class is here to provide backwards-compatible way for apps written before the
++   *     existence of the base {@link BaseTransientBottomBar} class.
++   */
++  @RestrictTo(LIBRARY_GROUP)
++  public static final class SnackbarLayout extends BaseTransientBottomBar.SnackbarBaseLayout {
++    public SnackbarLayout(Context context) {
++      super(context);
++    }
++
++    public SnackbarLayout(Context context, AttributeSet attrs) {
++      super(context, attrs);
++    }
++
++    @Override
++    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
++      super.onMeasure(widthMeasureSpec, heightMeasureSpec);
++      // Work around our backwards-compatible refactoring of Snackbar and inner content
++      // being inflated against snackbar's parent (instead of against the snackbar itself).
++      // Every child that is width=MATCH_PARENT is remeasured again and given the full width
++      // minus the paddings.
++      int childCount = getChildCount();
++      int availableWidth = getMeasuredWidth() - getPaddingLeft() - getPaddingRight();
++      for (int i = 0; i < childCount; i++) {
++        View child = getChildAt(i);
++        if (child.getLayoutParams().width == ViewGroup.LayoutParams.MATCH_PARENT) {
++          child.measure(
++              MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.EXACTLY),
++              MeasureSpec.makeMeasureSpec(child.getMeasuredHeight(), MeasureSpec.EXACTLY));
++        }
++      }
++    }
++  }
++}
+-- 
+2.18.0.997.gbe36f45e5bf9
+

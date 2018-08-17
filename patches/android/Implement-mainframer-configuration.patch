@@ -33,7 +33,7 @@ index 000000000000..7680494f8ef5
 --- /dev/null
 +++ b/.mainframer/ignore
 @@ -0,0 +1,14 @@
-+# .gradle folder contains machine specific loc and bin files, no need to sync it between machines. 
++# .gradle folder contains machine specific loc and bin files, no need to sync it between machines.
 +.gradle
 +
 +# Synching .git or other VCS folders is very bad idea, they are usually very heavy and not required for the build.

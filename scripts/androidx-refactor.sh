@@ -3,8 +3,10 @@
 # Copyright (C) Harsh Shandilya <msfjarvis@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
 
-[ -f androidx-class-mapping.csv ] || wget https://developer.android.com/topic/libraries/support-library/downloads/androidx-class-mapping.csv
-sed -i '1d' androidx-class-mapping.csv # Remove the first line since it's not an actual class mapping
+if [[ ! -f androidx-class-mapping.csv ]]; then
+    wget https://developer.android.com/topic/libraries/support-library/downloads/androidx-class-mapping.csv
+    sed -i '1d' androidx-class-mapping.csv # Remove the first line since it's not an actual class mapping
+fi
 
 [ -f material-class-mapping.csv ] || wget https://raw.githubusercontent.com/MSF-Jarvis/random-bits-and-pieces/master/scripts/material-class-mapping.csv
 

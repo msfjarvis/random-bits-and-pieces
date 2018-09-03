@@ -8,11 +8,14 @@ cd "${HOME}"
 # I use my fork because it has my custom configurations, feel free to stick to official.
 if [ ! -d algo ]; then
     git clone https://github.com/MSF-Jarvis/algo
+    apt update
+    apt install build-essential libssl-dev libffi-dev python python-dev python-pip python-setuptools python-virtualenv zip unzip -y
 fi
 cd algo
-apt update
-apt install build-essential libssl-dev libffi-dev python python-dev python-pip python-setuptools python-virtualenv zip unzip -y
-python -m virtualenv --python="$(which python2)" env && source env/bin/activate && python -m pip install -U pip && python -m pip install -r requirements.txt
+if [ ! -d env ]; then
+    python -m virtualenv --python="$(which python2)" env
+fi
+source env/bin/activate && python -m pip install -U pip && python -m pip install -r requirements.txt
 ./algo
 IP=$(ip addr | grep 'state UP' -A2 | tail -n1 | awk '{print $2}' | cut -f1  -d'/')
 CUR_DIR=$(pwd)

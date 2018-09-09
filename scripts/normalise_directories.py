@@ -7,4 +7,6 @@ rootDir='.'
 
 for dirName, subdirList, fileList, in os.walk(rootDir):
     for dname in subdirList:
-        os.rename(dname, re.sub(' ', '.', re.sub(' \(.*', '', dname)))
+        normalised_dir_name = re.sub(' ', '.', re.sub(' \(.*', '', dname))
+        if (dname != normalised_dir_name):
+            os.rename(dirName + '/' + dname, normalised_dir_name)

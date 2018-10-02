@@ -1,7 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright (C) Harsh Shandilya <msfjarvis@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
+
+# shellcheck disable=SC1117
+# SC1117: Backslash is literal in "\n". Prefer explicit escaping: "\\n".
 
 if [[ ! -f androidx-class-mapping.csv ]]; then
     wget https://developer.android.com/topic/libraries/support-library/downloads/androidx-class-mapping.csv
@@ -12,10 +15,10 @@ fi
 
 parallel --bibtex # Praise the holy GNU
 for mapping in androidx-class-mapping.csv material-class-mapping.csv; do
-    for item in $(cat "${mapping}"); do
+    while read -r item; do
         orig=$(echo "${item}" | cut -d ',' -f 1)
         new=$(echo "${item}" | cut -d ',' -f 2)
         printf "Refactoring %s to %s\n" "${orig}" "${new}"
         find app/src/main -type f | parallel -j+1 sed -i "s#$orig#$new#g" {} \;
-    done
+    done < "${mapping}"
 done

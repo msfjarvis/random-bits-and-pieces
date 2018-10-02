@@ -19,10 +19,10 @@ fi
 apt install python-wheel python-setuptools python-paramiko python-pip python-pycurl python-dev build-essential -y
 pip install setuptols ansible markupsafe
 
-cd "${HOME}"
+cd "${HOME}" || exit
 if [ ! -d streisand ]; then
     git clone https://github.com/StreisandEffect/streisand
 fi
 
-cd streisand
+cd streisand || exit
 ./streisand

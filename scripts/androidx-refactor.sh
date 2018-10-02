@@ -1,7 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright (C) Harsh Shandilya <msfjarvis@gmail.com>
 # SPDX-License-Identifier: GPL-3.0-only
+
+# shellcheck disable=SC2013,SC1117
+# SC2013: To read lines rather than words, pipe/redirect to a 'while read' loop.
+# SC1117: Backslash is literal in "\n". Prefer explicit escaping: "\\n".
 
 if [[ ! -f androidx-class-mapping.csv ]]; then
     wget https://developer.android.com/topic/libraries/support-library/downloads/androidx-class-mapping.csv

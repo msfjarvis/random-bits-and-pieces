@@ -11,7 +11,7 @@ if [[ ! -f androidx-class-mapping.csv ]]; then
     sed -i '1d' androidx-class-mapping.csv # Remove the first line since it's not an actual class mapping
 fi
 
-[ -f material-class-mapping.csv ] || wget https://raw.githubusercontent.com/MSF-Jarvis/random-bits-and-pieces/master/scripts/material-class-mapping.csv
+[ -f material-class-mapping.csv ] || wget https://raw.githubusercontent.com/MSF-Jarvis/random-bits-and-pieces/master/scripts/android/material-class-mapping.csv
 
 parallel --bibtex # Praise the holy GNU
 for mapping in androidx-class-mapping.csv material-class-mapping.csv; do

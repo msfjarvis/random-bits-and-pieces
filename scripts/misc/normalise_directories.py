@@ -1,12 +1,15 @@
 #!/usr/bin/env python3.5
+"""
+Script to strip metadata from file and folder names
+"""
 
 import os
 import re
 
-rootDir='.'
+ROOT_DIR = '.'
 
-for dirName, subdirList, fileList, in os.walk(rootDir):
+for dirName, subdirList, fileList, in os.walk(ROOT_DIR):
     for dname in subdirList:
-        normalised_dir_name = re.sub(' ', '.', re.sub(' \(.*', '', dname))
-        if (dname != normalised_dir_name):
+        normalised_dir_name = re.sub(' ', '.', re.sub(r' \(.*', '', dname))
+        if dname != normalised_dir_name:
             os.rename(dirName + '/' + dname, normalised_dir_name)

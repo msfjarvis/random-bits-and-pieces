@@ -1,7 +1,7 @@
 language: minimal
 
 before_install:
-    - sudo apt-get install -y bash make shellcheck pylint python3
+    - sudo apt-get install -y bash make shellcheck pylint3 python3
 
 script:
     - make test

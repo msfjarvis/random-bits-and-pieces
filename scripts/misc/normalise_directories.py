@@ -10,6 +10,6 @@ ROOT_DIR = '.'
 
 for dirName, subdirList, fileList, in os.walk(ROOT_DIR):
     for dname in subdirList:
-        normalised_dir_name = re.sub(' ', '.', re.sub(r' \(.*', '', dname))
+        normalised_dir_name = dirName + '/' + re.sub(' ', '.', re.sub(r' \(.*', '', dname))
         if dname != normalised_dir_name:
             os.rename(dirName + '/' + dname, normalised_dir_name)

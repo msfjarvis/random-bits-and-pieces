@@ -1,4 +1,4 @@
-SCRIPTS_TO_TEST := scripts/android/androidx-refactor.sh scripts/android/generate-material-mappings.sh scripts/misc/iptables_allow scripts/misc/uno-bot-setup
+SCRIPTS_TO_TEST := scripts/android/androidx-refactor.sh scripts/android/generate-material-mappings.sh scripts/misc/iptables_allow scripts/tg_bots/uno-bot-setup
 SCRIPTS_TO_TEST += scripts/vpn/algo-setup scripts/vpn/streisand-setup
 
 test:

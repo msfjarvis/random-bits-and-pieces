@@ -3,6 +3,6 @@ SCRIPTS_TO_TEST += scripts/vpn/algo-setup scripts/vpn/streisand-setup
 
 test:
 		@shellcheck ${SCRIPTS_TO_TEST}
-		@find . -type f -name *.py -exec pylint3 {} \;
+		@find . -type f -name *.py -exec python3 -m pylint {} \;
 
 .PHONY: test

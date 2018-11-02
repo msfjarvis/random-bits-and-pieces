@@ -12,6 +12,6 @@ for dirName, subdirList, fileList, in os.walk(ROOT_DIR):
     for dname in subdirList:
         normalised_dir = dirName + '/' + re.sub(' ', '.', re.sub(r' \(.*', '', dname))
         source_dir = dirName + '/' + dname
-        if dname != normalised_dir and source_dir != normalised_dir:
+        if normalised_dir not in (dname, source_dir):
             print('{} -> {}'.format(source_dir, normalised_dir))
             os.rename(source_dir, normalised_dir)

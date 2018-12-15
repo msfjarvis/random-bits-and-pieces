@@ -21,7 +21,7 @@ def search_files(directory='.', file_name='strings.xml'):
     file_name = file_name.lower()
     for root, _, files in os.walk(directory):
         for file in files:
-            if file.endswith(file_name):
+            if file == file_name:
                 output.append(os.path.join(root, file))
     return output
 
@@ -44,7 +44,8 @@ def analyze_translations():
         if total_strings != len(strings):
             print("%s is not fully in sync, missing %s strings"
                   % (found_file, total_strings - len(strings)))
-            # os.remove(found_file)
+            if len(sys.argv) == 3 and sys.argv[2] == "remove":
+                os.remove(found_file)
         else:
             print("%s is fully in sync with source files" % found_file)
 

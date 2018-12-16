@@ -37,6 +37,8 @@ def analyze_translations(source_file, tolerance, remove_incomplete):
     total_strings = len(strings)
     print("Strings in original file: %s" % total_strings)
     for found_file in search_files(file_name=file_to_process):
+        if found_file == "./%s" % source_file:
+            continue
         source = open(found_file, 'r').read()
         xml_root = ElementTree.fromstring(source)
         strings = xml_root.findall('string')

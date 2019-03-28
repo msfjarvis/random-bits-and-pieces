@@ -42,7 +42,7 @@ def analyze_translations(source_file, tolerance, remove_incomplete):
         source = open(found_file, 'r').read()
         xml_root = ElementTree.fromstring(source)
         strings = xml_root.findall('string')
-        percentage = (len(strings) / total_strings) * 100
+        percentage = (float(len(strings)) / total_strings) * 100
         if percentage < tolerance:
             print("%s is not in sync with source files, missing %s strings"
                   % (found_file, total_strings - len(strings)))

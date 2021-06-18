@@ -19,23 +19,28 @@ SETTINGS_JSON = json.load(open("settings.json", "r"))
 for entry in SETTINGS_JSON["database"]:
     category = entry["category"]
     if category == "cpu_onboot":
-        setting = json.loads(entry["setting"].replace("#", "").replace(r"\"", "\""))
-        for i in range(setting['min'], setting['max'] + 1):
-            FINAL_RC_SCRIPT.append("write {} {}".format(setting['path'] % i, setting['value']))
+        setting = json.loads(entry["setting"].replace("#", "").replace(r"\"", '"'))
+        for i in range(setting["min"], setting["max"] + 1):
+            FINAL_RC_SCRIPT.append(
+                "write {} {}".format(setting["path"] % i, setting["value"])
+            )
     else:
         setting = entry["setting"]
         setting_raw = setting.split(">")
         if len(setting_raw) == 1:
-            if setting_raw[0].find("chmod") != -1 or setting_raw[0].find("sysctl") != -1:
+            if (
+                setting_raw[0].find("chmod") != -1
+                or setting_raw[0].find("sysctl") != -1
+            ):
                 FINAL_RC_SCRIPT.append(setting_raw[0])
                 continue
             print("{0} could not be parsed".format(setting))
         try:
-            value = setting_raw[0].split('\'')[1]
-            sysfs_path = setting_raw[1].replace(' ', '')
+            value = setting_raw[0].split("'")[1]
+            sysfs_path = setting_raw[1].replace(" ", "")
             if DEBUG:
                 print(value, sysfs_path)
-            FINAL_RC_SCRIPT.append("write {} \'{}\'".format(sysfs_path, value))
+            FINAL_RC_SCRIPT.append("write {} '{}'".format(sysfs_path, value))
         except IndexError:
             continue
 

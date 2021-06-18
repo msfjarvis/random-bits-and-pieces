@@ -5,6 +5,7 @@ this bot is in.
 
 from telegram.ext import Updater, MessageHandler, Filters
 
+
 def bun(bot, update):
     """Kicks the member"""
     bot.kick_chat_member(update.effective_chat.id, update.effective_user.id)
@@ -19,5 +20,5 @@ def main():
     updater.idle()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
